@@ -1,0 +1,93 @@
+---
+title: "Predicting the Way Weight Lifting Exercises Were Performed"
+output: html_document
+---
+
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants who were asked to perform barbell lifts correctly and incorrectly in 5 different ways, are used. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har. 
+
+The goal is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. 
+
+
+## Build the Prediction Model
+
+### Load Libraries
+
+```{r}
+library(caret)
+library(gbm)
+```
+
+### Load Training Dataset
+
+Load the training data downloaded from https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+```{r}
+train_dataset <- read.csv("pml-training.csv",stringsAsFactors=FALSE)
+train_dataset$classe <- as.factor(train_dataset$classe)
+```
+
+### Clean Training Dataset
+
+The objective of this step is to ensure that variables that are not likely to contribute to the prediction model are excluded before the model building step. This would include Near Zero Variables as well as variables that have a significant proportion of missing values.
+
+1. Check and remove "Near Zero Variables from training dataset.
+```{r}
+nzv_list <- nearZeroVar (train_dataset)
+train_dataset2 <- train_dataset[,-nzv_list]
+```
+
+2. Check for variables with missing values (10% or more) and exclude them from training dataset 
+```{r}
+clean_list <- (apply(is.na(train_dataset2),2,mean)) <= 0.1
+train_dataset3 <- train_dataset2[,clean_list]
+```
+
+3. Remove index variable from training dataset, as it is not used in building the prediction model 
+```{r}
+train_dataset4 <- train_dataset3[,-1]  #exclude index variable
+```
+
+### Partition Training Dataset into: (i) 50% Train Sample and (ii) 50% Test Sample
+
+```{r}
+set.seed(100)
+inTrain <- createDataPartition(y=train_dataset4$classe, p=0.5, list=FALSE)
+train_sample <- train_dataset4[inTrain,] #training sample
+test_sample <- train_dataset4[-inTrain,] #test sample for cross validation
+```
+
+### Build Model Using Stochastic Gradient Boosting
+
+Initially, prediction models using both Stochastic Gradient Boosting and Random Forest were built on just 10% of the Training Dataset. Both provided similar accuracy levels, but Random Forest took a much longer time to complete. Hence, the final model (using a much larger 50% of the Training Dataset) was built using Stochastic Gradient Boosting.
+```{r}
+modgbm <- train(classe ~., data=train_sample, method="gbm", verbose=FALSE); modgbm
+modgbm$finalModel
+```
+
+
+## Cross Validation of Prediction Model
+
+From the Confusion Matrix, the accuracy of the final prediction model on the test sample was 0.9984. Hence, an out of sample error of less than 1% is expected.
+
+```{r}
+pred_gbm <- predict(modgbm,newdata=test_sample)
+confusionMatrix(pred_gbm,test_sample$classe)
+```
+
+
+## Use Final Prediction Model on 20 Different Test Cases
+
+Load and predict using test data downloaded from https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+```{r}
+test_dataset <- read.csv("pml-testing.csv", stringsAsFactors=FALSE)
+pred_test <- predict(modgbm,newdata=test_dataset)
+```
+
+
+## References
+
+Groupware@LES, Human Activity Recognition, <http://groupware.les.inf.puc-rio.br/har>, Accessed 16 Jan 2015.
